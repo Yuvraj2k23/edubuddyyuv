@@ -89,26 +89,30 @@ export default function Sidebar({
         </div>
 
         <div className="sidebar-section-label">LEARNING WORKSPACE</div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Primary workspace navigation">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 className={`nav-item ${isActive ? 'active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => {
                   setActiveTab(item.id);
                   closeMobile();
                 }}
               >
-                <Icon size={18} className="nav-icon" />
+                <Icon size={18} className="nav-icon" aria-hidden="true" />
                 <div className="nav-text">
                   <div className="nav-label">{item.label}</div>
                   <div className="nav-desc">{item.desc}</div>
                 </div>
                 {item.id === 'history' && searchHistory.length > 0 && (
-                  <span className="nav-count-badge">{searchHistory.length}</span>
+                  <span className="nav-count-badge" aria-label={`${searchHistory.length} searches`}>
+                    {searchHistory.length}
+                  </span>
                 )}
               </button>
             );

@@ -271,13 +271,26 @@ function ConceptMapSVG({ conceptMap, selectedNode, setSelectedNode, accentColor 
             return (
               <g
                 key={node.label}
+                role="button"
+                tabIndex={0}
+                aria-label={`${node.label}: ${node.role}`}
+                aria-pressed={isSelected}
                 className={`map-sat-node ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
                 onClick={() => {
                   setSelectedNode(i);
                   setHoveredNode(null);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedNode(i);
+                    setHoveredNode(null);
+                  }
+                }}
                 onMouseEnter={() => setHoveredNode(i)}
                 onMouseLeave={() => setHoveredNode((curr) => (curr === i ? null : curr))}
+                onFocus={() => setHoveredNode(i)}
+                onBlur={() => setHoveredNode((curr) => (curr === i ? null : curr))}
                 style={{ cursor: 'pointer' }}
               >
                 {/* Solid opaque card base */}
@@ -477,9 +490,13 @@ export default function ConceptSimplifier({
           </div>
         </div>
 
-        <form className="search-bar-form" onSubmit={handleSubmit}>
-          <Search size={18} className="search-icon" />
+        <form className="search-bar-form" onSubmit={handleSubmit} role="search">
+          <Search size={18} className="search-icon" aria-hidden="true" />
+          <label htmlFor="concept-search-input" className="sr-only">
+            Search any academic topic to simplify
+          </label>
           <input
+            id="concept-search-input"
             type="text"
             className="search-input"
             placeholder='Try "Fourier Transform", "TCP Handshake", "Mitochondria", or "Bayesian Inference"...'
@@ -650,58 +667,57 @@ export default function ConceptSimplifier({
             />
           </div>
 
-          <div
-            className={`card analogy-card interactive-card ${analogyOpen ? 'expanded' : ''}`}
-            onClick={() => setAnalogyOpen((v) => !v)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setAnalogyOpen((v) => !v);
-              }
-            }}
-          >
-            <div className="interactive-card-head">
-              <div className="card-head mb-0">
-                <Lightbulb size={18} className="accent-amber" />
-                <h3>Real-World Analogy</h3>
+          <div className={`card analogy-card ${analogyOpen ? 'expanded' : ''}`}>
+            <button
+              type="button"
+              className="card-toggle-trigger"
+              aria-expanded={analogyOpen}
+              onClick={() => setAnalogyOpen((v) => !v)}
+            >
+              <div className="interactive-card-head">
+                <div className="card-head mb-0">
+                  <Lightbulb size={18} className="accent-amber" aria-hidden="true" />
+                  <h3>Real-World Analogy</h3>
+                </div>
+                <span className="expand-cue">
+                  {analogyOpen ? (
+                    <>
+                      Hide details <ChevronUp size={15} aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      Click to explore <ChevronDown size={15} aria-hidden="true" />
+                    </>
+                  )}
+                </span>
               </div>
-              <span className="expand-cue">
-                {analogyOpen ? (
-                  <>
-                    Hide details <ChevronUp size={15} />
-                  </>
-                ) : (
-                  <>
-                    Click to explore <ChevronDown size={15} />
-                  </>
-                )}
-              </span>
-            </div>
-            <p className="callout-text">{alternateAnalogies[analogyMode]}</p>
+              <p className="callout-text">{alternateAnalogies[analogyMode]}</p>
+            </button>
 
             {analogyOpen && (
-              <div
-                className="expanded-detail-drawer"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="expanded-detail-drawer">
                 <div className="drawer-sub-label">Try Another Analogy Angle:</div>
-                <div className="analogy-angle-tabs">
+                <div className="analogy-angle-tabs" role="group" aria-label="Analogy style switcher">
                   <button
+                    type="button"
                     className={`angle-pill ${analogyMode === 'primary' ? 'active' : ''}`}
+                    aria-pressed={analogyMode === 'primary'}
                     onClick={() => setAnalogyMode('primary')}
                   >
                     Classic Analogy
                   </button>
                   <button
+                    type="button"
                     className={`angle-pill ${analogyMode === 'game' ? 'active' : ''}`}
+                    aria-pressed={analogyMode === 'game'}
                     onClick={() => setAnalogyMode('game')}
                   >
                     Game / Strategy
                   </button>
                   <button
+                    type="button"
                     className={`angle-pill ${analogyMode === 'daily' ? 'active' : ''}`}
+                    aria-pressed={analogyMode === 'daily'}
                     onClick={() => setAnalogyMode('daily')}
                   >
                     Daily Routine
@@ -714,7 +730,7 @@ export default function ConceptSimplifier({
                     {mapPillars.map((node) => (
                       <div key={node.label} className="mapping-row">
                         <span className="mapping-key">{node.label}</span>
-                        <span className="mapping-arrow">→</span>
+                        <span className="mapping-arrow" aria-hidden="true">→</span>
                         <span className="mapping-val">
                           {node.detail.length > 105 ? `${node.detail.slice(0, 104)}…` : node.detail}
                         </span>
@@ -724,68 +740,62 @@ export default function ConceptSimplifier({
                 )}
 
                 <button
+                  type="button"
                   className="btn-outline btn-sm mt-3"
                   onClick={() => onNavigate('tutor')}
                 >
-                  <Sparkle size={14} /> Ask AI Tutor for a Custom Analogy
+                  <Sparkle size={14} aria-hidden="true" /> Ask AI Tutor for a Custom Analogy
                 </button>
               </div>
             )}
           </div>
 
-          <div
-            className={`card mistake-card interactive-card ${misconceptionOpen ? 'expanded' : ''}`}
-            onClick={() => setMisconceptionOpen((v) => !v)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setMisconceptionOpen((v) => !v);
-              }
-            }}
-          >
-            <div className="interactive-card-head">
-              <div className="card-head mb-0">
-                <AlertTriangle size={18} className="accent-rose" />
-                <h3>Common Misconception to Avoid</h3>
+          <div className={`card mistake-card ${misconceptionOpen ? 'expanded' : ''}`}>
+            <button
+              type="button"
+              className="card-toggle-trigger"
+              aria-expanded={misconceptionOpen}
+              onClick={() => setMisconceptionOpen((v) => !v)}
+            >
+              <div className="interactive-card-head">
+                <div className="card-head mb-0">
+                  <AlertTriangle size={18} className="accent-rose" aria-hidden="true" />
+                  <h3>Common Misconception to Avoid</h3>
+                </div>
+                <span className="expand-cue rose">
+                  {misconceptionOpen ? (
+                    <>
+                      Hide Myth vs Reality <ChevronUp size={15} aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      Myth vs Reality <ChevronDown size={15} aria-hidden="true" />
+                    </>
+                  )}
+                </span>
               </div>
-              <span className="expand-cue rose">
-                {misconceptionOpen ? (
-                  <>
-                    Hide Myth vs Reality <ChevronUp size={15} />
-                  </>
-                ) : (
-                  <>
-                    Myth vs Reality <ChevronDown size={15} />
-                  </>
-                )}
-              </span>
-            </div>
-            <p className="callout-text">{levelData.commonMistake}</p>
+              <p className="callout-text">{levelData.commonMistake}</p>
+            </button>
 
             {misconceptionOpen && (
-              <div
-                className="expanded-detail-drawer"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="expanded-detail-drawer">
                 <div className="myth-reality-grid">
                   <div className="mr-box myth">
                     <div className="mr-head">
-                      <XCircle size={14} /> The Common Trap
+                      <XCircle size={14} aria-hidden="true" /> The Common Trap
                     </div>
                     <p>{levelData.commonMistake}</p>
                   </div>
                   <div className="mr-box reality">
                     <div className="mr-head">
-                      <CheckCircle2 size={14} /> What Is Actually True
+                      <CheckCircle2 size={14} aria-hidden="true" /> What Is Actually True
                     </div>
                     <p>{levelData.summary}</p>
                   </div>
                 </div>
 
                 <div className="exam-defense-box">
-                  <ShieldCheck size={15} className="accent-emerald" />
+                  <ShieldCheck size={15} className="accent-emerald" aria-hidden="true" />
                   <div>
                     <strong>Exam Sanity Check:</strong> Anchor your answer on{' '}
                     <code>{levelData.formulaOrRule}</code> before choosing an option.
@@ -793,10 +803,11 @@ export default function ConceptSimplifier({
                 </div>
 
                 <button
+                  type="button"
                   className="btn-outline btn-sm mt-3"
                   onClick={() => onNavigate('practice')}
                 >
-                  <BrainCircuit size={14} /> Test Yourself on the Adaptive Quiz
+                  <BrainCircuit size={14} aria-hidden="true" /> Test Yourself on the Adaptive Quiz
                 </button>
               </div>
             )}

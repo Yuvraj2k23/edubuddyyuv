@@ -24,6 +24,7 @@ import SettingsModal from './components/SettingsModal';
 import { TOPICS } from './data/knowledgeBase';
 import { cleanAcademicQuery, resolveAnyTopic } from './utils/aiEngine';
 import { createInitialSearchHistory } from './utils/historyUtils';
+import { stripSecretsForStorage } from './utils/security';
 
 const STORAGE_KEY = 'edubuddy_state_v2';
 
@@ -52,14 +53,13 @@ export default function App() {
   const [level, setLevel] = useState(initial.level || 'highschool');
   const [topics, setTopics] = useState(TOPICS);
   const [activeTopic, setActiveTopic] = useState(TOPICS[0]);
-  const [apiKeys, setApiKeys] = useState(
-    initial.apiKeys || {
-      gemini: initial.apiKey || '',
-      openai: '',
-      claude: '',
-      openrouter: '',
-    }
-  );
+  // Security best practice: keep user-provided API keys strictly in volatile in-memory state (never persisted to localStorage)
+  const [apiKeys, setApiKeys] = useState({
+    gemini: '',
+    openai: '',
+    claude: '',
+    openrouter: '',
+  });
   const [xp, setXp] = useState(initial.xp ?? 60);
   const [streak] = useState(initial.streak ?? 3);
   const [masteredTopicIds, setMasteredTopicIds] = useState(initial.masteredTopicIds || []);
@@ -92,28 +92,25 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          theme,
-          level,
-          apiKeys,
-          xp,
-          streak,
-          masteredTopicIds,
-          masteredCardIds,
-          savedResources,
-          resourceMeta,
-          customResources: customResources.slice(0, 25),
-          quizHistory,
-          activityLog: activityLog.slice(0, 15),
-          searchHistory: searchHistory.slice(0, 40),
-        })
-      );
+      const safePayload = stripSecretsForStorage({
+        theme,
+        level,
+        xp,
+        streak,
+        masteredTopicIds,
+        masteredCardIds,
+        savedResources,
+        resourceMeta,
+        customResources: customResources.slice(0, 25),
+        quizHistory,
+        activityLog: activityLog.slice(0, 15),
+        searchHistory: searchHistory.slice(0, 40),
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(safePayload));
     } catch {
       // Ignore storage quota errors
     }
-  }, [theme, level, apiKeys, xp, streak, masteredTopicIds, masteredCardIds, savedResources, resourceMeta, customResources, quizHistory, activityLog, searchHistory]);
+  }, [theme, level, xp, streak, masteredTopicIds, masteredCardIds, savedResources, resourceMeta, customResources, quizHistory, activityLog, searchHistory]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -312,6 +309,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -349,13 +349,16 @@ export default function App() {
           <nav className="quick-dock-bar" aria-label="Quick tool switcher">
             {QUICK_DOCK_ITEMS.map((item) => {
               const Icon = item.icon;
+              const isCurrent = activeTab === item.id;
               return (
                 <button
                   key={item.id}
-                  className={`dock-pill ${activeTab === item.id ? 'active' : ''}`}
+                  type="button"
+                  className={`dock-pill ${isCurrent ? 'active' : ''}`}
+                  aria-current={isCurrent ? 'page' : undefined}
                   onClick={() => setActiveTab(item.id)}
                 >
-                  <Icon size={14} />
+                  <Icon size={14} aria-hidden="true" />
                   <span>{item.label}</span>
                 </button>
               );
@@ -363,7 +366,7 @@ export default function App() {
           </nav>
         </div>
 
-        <main className="main-scroll">
+        <main id="main-content" tabIndex={-1} className="main-scroll">
           {activeTab === 'home' && (
             <HomeHub
               level={level}
@@ -524,7 +527,11 @@ export default function App() {
         onResetProgress={handleResetProgress}
       />
 
-      {toast && <div className="toast-banner">{toast}</div>}
+      {toast && (
+        <div className="toast-banner" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

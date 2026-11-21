@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Key, CheckCircle2, AlertCircle, Loader2, Sparkles, RotateCcw, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Key, CheckCircle2, AlertCircle, Loader2, Sparkles, RotateCcw, Globe, ShieldCheck } from 'lucide-react';
 import { testProviderKey } from '../utils/aiEngine';
 
 const PROVIDERS = [
@@ -53,6 +53,15 @@ export default function SettingsModal({
   const [testingId, setTestingId] = useState(null);
   const [status, setStatus] = useState(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleChange = (id, val) => {
@@ -80,84 +89,113 @@ export default function SettingsModal({
   };
 
   const handleSaveAll = () => {
-    const cleaned = {
+    onSaveApiKeys({
       gemini: draft.gemini.trim(),
       openai: draft.openai.trim(),
       claude: draft.claude.trim(),
       openrouter: draft.openrouter.trim(),
-    };
-    onSaveApiKeys(cleaned);
+    });
     onClose();
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-wide" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div className="flex-row gap-2">
-            <Sparkles size={18} className="accent-indigo" />
-            <h3>Multi-AI & Live Web Engine Settings</h3>
+            <Sparkles size={18} className="accent-indigo" aria-hidden="true" />
+            <h2 id="settings-modal-title" className="modal-title-h2">
+              Multi-AI & Live Web Engine Settings
+            </h2>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close settings">
-            <X size={18} />
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close settings">
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
         <div className="modal-body">
           <div className="info-banner">
             <div className="flex-row gap-2 mb-1">
-              <Globe size={15} className="accent-indigo" />
+              <Globe size={15} className="accent-indigo" aria-hidden="true" />
               <strong>Multi-Web Live Search is ALWAYS ON (Zero Key Needed!)</strong>
             </div>
             EduBuddy automatically searches <strong>Simple Wikipedia</strong>, <strong>Wikipedia</strong>, and{' '}
-            <strong>OpenAlex Academic Papers</strong> in parallel. Add one or more AI API keys below to also
-            query <strong>Gemini, ChatGPT, and Claude side-by-side</strong> right inside the app!
+            <strong>OpenAlex Academic Papers</strong> in parallel. Optionally add AI API keys below for
+            live multi-model debate and image vision.
+            <div className="flex-row gap-1 mt-2 security-note-inline">
+              <ShieldCheck size={14} className="accent-emerald" aria-hidden="true" />
+              <span>
+                <strong>Privacy & Security:</strong> Keys stay strictly in browser memory for this session only — never written to <code>localStorage</code> or stored on any backend server.
+              </span>
+            </div>
           </div>
 
           <div className="providers-list">
-            {PROVIDERS.map((p) => (
-              <div key={p.id} className="provider-row">
-                <div className="provider-top">
-                  <label className="field-label">
-                    <Key size={13} /> {p.name}
-                  </label>
-                  <span className="provider-badge">{p.badge}</span>
-                </div>
-                <div className="provider-input-row">
-                  <input
-                    type="password"
-                    className="text-input"
-                    placeholder={p.placeholder}
-                    value={draft[p.id]}
-                    onChange={(e) => handleChange(p.id, e.target.value)}
-                  />
-                  <button
-                    className="btn-outline btn-sm"
-                    onClick={() => handleTestOne(p.id)}
-                    disabled={testingId === p.id || !draft[p.id].trim()}
+            {PROVIDERS.map((p) => {
+              const inputId = `api-key-input-${p.id}`;
+              return (
+                <div key={p.id} className="provider-row">
+                  <div className="provider-top">
+                    <label htmlFor={inputId} className="field-label">
+                      <Key size={13} aria-hidden="true" /> {p.name}
+                    </label>
+                    <span className="provider-badge">{p.badge}</span>
+                  </div>
+                  <div className="provider-input-row">
+                    <input
+                      id={inputId}
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="text-input"
+                      placeholder={p.placeholder}
+                      value={draft[p.id]}
+                      onChange={(e) => handleChange(p.id, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm"
+                      onClick={() => handleTestOne(p.id)}
+                      disabled={testingId === p.id || !draft[p.id].trim()}
+                    >
+                      {testingId === p.id ? <Loader2 size={14} className="spin" aria-hidden="true" /> : 'Test'}
+                    </button>
+                  </div>
+                  <a
+                    href={p.linkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="provider-link"
                   >
-                    {testingId === p.id ? <Loader2 size={14} className="spin" /> : 'Test'}
-                  </button>
+                    {p.linkText} ↗
+                  </a>
                 </div>
-                <a href={p.linkUrl} target="_blank" rel="noreferrer" className="provider-link">
-                  {p.linkText} ↗
-                </a>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {status && (
-            <div className={`status-msg ${status.ok ? 'ok' : 'err'}`}>
-              {status.ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <div className={`status-msg ${status.ok ? 'ok' : 'err'}`} role="status" aria-live="polite">
+              {status.ok ? (
+                <CheckCircle2 size={16} aria-hidden="true" />
+              ) : (
+                <AlertCircle size={16} aria-hidden="true" />
+              )}
               <span>{status.msg}</span>
             </div>
           )}
 
           <div className="modal-actions">
-            <button className="btn-primary" onClick={handleSaveAll}>
-              Save Multi-AI Settings
+            <button type="button" className="btn-primary" onClick={handleSaveAll}>
+              Save Session Keys
             </button>
-            <button className="btn-outline" onClick={onClose}>
+            <button type="button" className="btn-outline" onClick={onClose}>
               Cancel
             </button>
           </div>
@@ -170,13 +208,14 @@ export default function SettingsModal({
               <div className="muted-xs">Clears XP, mastered topics, saved study plan, and quiz history.</div>
             </div>
             <button
+              type="button"
               className="btn-ghost btn-sm"
               onClick={() => {
                 onResetProgress();
                 setStatus({ ok: true, msg: 'Progress reset for a fresh demo!' });
               }}
             >
-              <RotateCcw size={14} /> Reset
+              <RotateCcw size={14} aria-hidden="true" /> Reset
             </button>
           </div>
         </div>

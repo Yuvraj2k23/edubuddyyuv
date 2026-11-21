@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { LEVELS } from '../data/knowledgeBase';
 import { simplifyStudentNotes } from '../utils/aiEngine';
+import { validateUploadedFile, sanitizeUserText } from '../utils/security';
 
 const SAMPLE_NOTES = [
   {
@@ -52,10 +53,20 @@ export default function NoteSimplifier({ level, setLevel, apiKey, onEarnXP }) {
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const check = validateUploadedFile(file, {
+      maxBytes: 2 * 1024 * 1024,
+      allowImages: false,
+      allowPdf: false,
+      allowText: true,
+    });
+    if (!check.valid) {
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (typeof ev.target?.result === 'string') {
-        setNoteText(ev.target.result.slice(0, 6000));
+        setNoteText(sanitizeUserText(ev.target.result, 6000));
       }
     };
     reader.readAsText(file);

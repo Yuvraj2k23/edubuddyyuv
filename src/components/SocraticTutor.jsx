@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { LEVELS } from '../data/knowledgeBase';
 import { getTutorReply } from '../utils/aiEngine';
+import { sanitizeExternalUrl, validateUploadedFile, isSafeMediaDataUrl } from '../utils/security';
 
 const QUICK_PROMPTS = [
   { label: 'Explain like I\'m 10', prompt: 'Explain this much simpler like I am 10 years old' },
@@ -173,6 +174,7 @@ export default function SocraticTutor({
   const [messages, setMessages] = useState([]);
   const [chatContext, setChatContext] = useState(null);
   const [attachment, setAttachment] = useState(null); // { kind: 'image'|'text', name, mimeType, dataUrl, base64, textContent, sizeLabel }
+  const [uploadError, setUploadError] = useState('');
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -220,14 +222,30 @@ export default function SocraticTutor({
 
   const processUploadedFile = (file) => {
     if (!file) return;
+    setUploadError('');
+    const check = validateUploadedFile(file, {
+      maxBytes: 5 * 1024 * 1024,
+      allowImages: true,
+      allowPdf: false,
+      allowText: true,
+    });
+    if (!check.valid) {
+      setUploadError(check.error);
+      return;
+    }
+
     const sizeKB = Math.max(1, Math.round(file.size / 1024));
     const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
 
-    if (file.type.startsWith('image/')) {
+    if (check.kind === 'image') {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result;
-        const base64 = typeof dataUrl === 'string' ? dataUrl.split(',')[1] : '';
+        if (!isSafeMediaDataUrl(dataUrl)) {
+          setUploadError('Unsupported image encoding.');
+          return;
+        }
+        const base64 = dataUrl.split(',')[1] || '';
         setAttachment({
           kind: 'image',
           name: file.name || 'pasted-question.png',
@@ -423,7 +441,7 @@ export default function SocraticTutor({
       )}
 
       <div className="card chat-shell">
-        <div className="chat-messages">
+        <div className="chat-messages" role="log" aria-live="polite" aria-label="AI Tutor conversation">
           {messages.map((msg) => (
             <div key={msg.id} className={`chat-bubble-row ${msg.role}`}>
               <div className={`chat-avatar ${msg.role}`}>
@@ -468,20 +486,24 @@ export default function SocraticTutor({
                       <Globe size={12} /> Verified Web & Research Sources
                     </div>
                     <div className="web-sources-list">
-                      {msg.webSources.map((src, idx) => (
-                        <a
-                          key={idx}
-                          href={src.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="web-source-pill"
-                          title={src.snippet}
-                        >
-                          <span className="src-site">{src.site}</span>
-                          <span className="src-title">{src.title}</span>
-                          <ExternalLink size={11} />
-                        </a>
-                      ))}
+                      {msg.webSources.map((src, idx) => {
+                        const safeHref = sanitizeExternalUrl(src.url);
+                        if (!safeHref) return null;
+                        return (
+                          <a
+                            key={idx}
+                            href={safeHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="web-source-pill"
+                            title={src.snippet}
+                          >
+                            <span className="src-site">{src.site}</span>
+                            <span className="src-title">{src.title}</span>
+                            <ExternalLink size={11} aria-hidden="true" />
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -489,18 +511,22 @@ export default function SocraticTutor({
                 {msg.compareLinks && msg.compareLinks.length > 0 && (
                   <div className="compare-ai-bar">
                     <span className="compare-label">Compare on:</span>
-                    {msg.compareLinks.map((lnk) => (
-                      <a
-                        key={lnk.name}
-                        href={lnk.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="compare-pill"
-                        style={{ '--cmp-color': lnk.color }}
-                      >
-                        {lnk.name} <ExternalLink size={10} />
-                      </a>
-                    ))}
+                    {msg.compareLinks.map((lnk) => {
+                      const safeHref = sanitizeExternalUrl(lnk.url);
+                      if (!safeHref) return null;
+                      return (
+                        <a
+                          key={lnk.name}
+                          href={safeHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="compare-pill"
+                          style={{ '--cmp-color': lnk.color }}
+                        >
+                          {lnk.name} <ExternalLink size={10} aria-hidden="true" />
+                        </a>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -523,6 +549,12 @@ export default function SocraticTutor({
           )}
           <div ref={bottomRef} />
         </div>
+
+        {uploadError && (
+          <div className="status-msg err upload-err-bar" role="alert">
+            <span>{uploadError}</span>
+          </div>
+        )}
 
         {/* Active Pinned Attachment Bar (stays pinned so student can ask multiple sub-questions!) */}
         {attachment && (

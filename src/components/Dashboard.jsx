@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LEVELS } from '../data/knowledgeBase';
+import { sanitizeExternalUrl } from '../utils/security';
 
 export default function Dashboard({
   xp,
@@ -161,25 +162,39 @@ export default function Dashboard({
               </p>
             ) : (
               <div className="saved-plan-list">
-                {savedResources.map((r) => (
-                  <div key={r.id} className="saved-plan-item">
-                    <div>
-                      <a href={r.url} target="_blank" rel="noreferrer" className="saved-link">
-                        {r.title} <ExternalLink size={12} />
-                      </a>
-                      <div className="muted-xs">
-                        {r.platform} · {r.type} · {r.duration}
+                {savedResources.map((r) => {
+                  const safeHref = sanitizeExternalUrl(r.url);
+                  return (
+                    <div key={r.id} className="saved-plan-item">
+                      <div>
+                        {safeHref ? (
+                          <a
+                            href={safeHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="saved-link"
+                          >
+                            {r.title} <ExternalLink size={12} aria-hidden="true" />
+                          </a>
+                        ) : (
+                          <span className="saved-link">{r.title}</span>
+                        )}
+                        <div className="muted-xs">
+                          {r.platform} · {r.type} · {r.duration}
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => onRemoveSavedResource(r)}
+                        title="Remove from plan"
+                        aria-label={`Remove ${r.title} from study plan`}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
                     </div>
-                    <button
-                      className="icon-btn"
-                      onClick={() => onRemoveSavedResource(r)}
-                      title="Remove from plan"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

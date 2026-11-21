@@ -1,4 +1,5 @@
 import { LEVELS, TOPICS, generateCustomTopic } from '../data/knowledgeBase.js';
+import { sanitizeExternalUrl, sanitizeUserText } from './security.js';
 
 const GEMINI_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -12,8 +13,9 @@ const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
  * "explain me the revolt of 1857 in one paragraph" -> "revolt of 1857"
  */
 export function cleanAcademicQuery(raw) {
-  if (!raw) return '';
-  let text = raw.trim();
+  const safeRaw = sanitizeUserText(raw, 400);
+  if (!safeRaw) return '';
+  let text = safeRaw;
 
   const prefixPattern =
     /^(hey\s+|hi\s+|bro\s+|please\s+|pls\s+|can\s+you\s+|could\s+you\s+|would\s+you\s+|what\s+is\s+(an?|the)\s+|what\s+is\s+|what\s+are\s+(the\s+)?|who\s+is\s+|who\s+was\s+|who\s+were\s+|explain\s+(to\s+)?(me\s+)?(about\s+)?(the\s+)?|define\s+(the\s+)?|tell\s+me\s+(about\s+)?(the\s+)?|write\s+(a\s+)?(short\s+)?(paragraph|note|summary|essay)\s+(on|about)\s+(the\s+)?|summarize\s+(the\s+)?|give\s+me\s+(a\s+)?(brief\s+|short\s+)?(summary|explanation|overview|definition)\s+(of|on|about)\s+(the\s+)?|how\s+does\s+(an?|the\s+)?|how\s+do\s+(the\s+)?|why\s+did\s+(the\s+)?|meaning\s+of\s+(the\s+)?|describe\s+(the\s+)?)/i;
@@ -382,7 +384,7 @@ export async function searchMultiWebSources(rawQuery) {
     webSources.push({
       site: 'Wikipedia Encyclopedia',
       title: enWiki.title,
-      url: enWiki.wikiUrl,
+      url: sanitizeExternalUrl(enWiki.wikiUrl),
       snippet: enWiki.sentences[0] || enWiki.intro.slice(0, 140),
     });
   }
@@ -390,15 +392,17 @@ export async function searchMultiWebSources(rawQuery) {
     webSources.push({
       site: 'Simple English Wiki (ELI5)',
       title: simpleWiki.title,
-      url: simpleWiki.wikiUrl,
+      url: sanitizeExternalUrl(simpleWiki.wikiUrl),
       snippet: simpleWiki.sentences[0] || simpleWiki.intro.slice(0, 140),
     });
   }
   papers.slice(0, 2).forEach((p) => {
+    const safePaperUrl = sanitizeExternalUrl(p.url);
+    if (!safePaperUrl) return;
     webSources.push({
       site: p.site,
       title: p.title.length > 68 ? `${p.title.slice(0, 67)}…` : p.title,
-      url: p.url,
+      url: safePaperUrl,
       snippet: p.citations ? `Cited ${p.citations.toLocaleString()} times` : 'Peer-reviewed study',
     });
   });
@@ -1026,9 +1030,12 @@ async function callGemini(apiKey, prompt, expectJson = false, attachment = null)
       ...(expectJson ? { responseMimeType: 'application/json' } : {}),
     },
   };
-  const res = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey.trim())}`, {
+  const res = await fetch(GEMINI_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey.trim(),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -1102,7 +1109,6 @@ async function callClaude(apiKey, prompt, attachment = null) {
       'Content-Type': 'application/json',
       'x-api-key': apiKey.trim(),
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model: 'claude-3-5-haiku-latest',

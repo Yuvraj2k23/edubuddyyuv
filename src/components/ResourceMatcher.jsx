@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BookOpen,
   Video,
@@ -27,8 +27,15 @@ import {
   Trash2,
   Eye,
   Compass,
+  AlertCircle,
 } from 'lucide-react';
 import { LEVELS, SUBJECTS } from '../data/knowledgeBase';
+import {
+  sanitizeExternalUrl,
+  sanitizeUserText,
+  validateUploadedFile,
+  isSafeMediaDataUrl,
+} from '../utils/security';
 
 const TYPE_ICONS = {
   Video: Video,
@@ -157,7 +164,20 @@ export default function ResourceMatcher({
   const [formNotesText, setFormNotesText] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [uploadedFileDataUrl, setUploadedFileDataUrl] = useState('');
+  const [formError, setFormError] = useState('');
   const [previewResource, setPreviewResource] = useState(null);
+
+  useEffect(() => {
+    if (!addModalOpen && !previewResource) return;
+    const onEsc = (e) => {
+      if (e.key === 'Escape') {
+        setAddModalOpen(false);
+        setPreviewResource(null);
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [addModalOpen, previewResource]);
 
   const currentLevelIdx = LEVELS.findIndex((l) => l.id === level);
   const currentLevelObj = LEVELS[currentLevelIdx] || LEVELS[1];
@@ -236,22 +256,40 @@ export default function ResourceMatcher({
   const handleFileUploadInModal = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadedFileName(file.name);
-    if (!formTitle.trim()) {
-      setFormTitle(file.name.replace(/\.[^.]+$/, ''));
+    setFormError('');
+    const check = validateUploadedFile(file, {
+      maxBytes: 5 * 1024 * 1024,
+      allowImages: true,
+      allowPdf: true,
+      allowText: true,
+    });
+    if (!check.valid) {
+      setFormError(check.error);
+      e.target.value = '';
+      return;
     }
 
-    if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
+    setUploadedFileName(file.name);
+    if (!formTitle.trim()) {
+      setFormTitle(sanitizeUserText(file.name.replace(/\.[^.]+$/, ''), 120));
+    }
+
+    if (check.kind === 'pdf' || check.kind === 'image') {
       const reader = new FileReader();
       reader.onload = () => {
-        setUploadedFileDataUrl(typeof reader.result === 'string' ? reader.result : '');
+        const resStr = typeof reader.result === 'string' ? reader.result : '';
+        if (isSafeMediaDataUrl(resStr)) {
+          setUploadedFileDataUrl(resStr);
+        } else {
+          setFormError('Invalid media format.');
+        }
       };
       reader.readAsDataURL(file);
     } else {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          setFormNotesText(reader.result.slice(0, 12000));
+          setFormNotesText(sanitizeUserText(reader.result, 12000));
         }
       };
       reader.readAsText(file);
@@ -260,35 +298,43 @@ export default function ResourceMatcher({
 
   const handleCreateCustomResource = (e) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
-    if (addMode === 'url' && !formUrl.trim()) return;
-    if (addMode === 'notes' && !formNotesText.trim() && !uploadedFileDataUrl) return;
+    setFormError('');
+    const safeTitle = sanitizeUserText(formTitle, 140);
+    if (!safeTitle) {
+      setFormError('Please enter a resource title.');
+      return;
+    }
 
-    const cleanUrl =
-      addMode === 'url'
-        ? /^https?:\/\//i.test(formUrl.trim())
-          ? formUrl.trim()
-          : `https://${formUrl.trim()}`
-        : '';
+    let cleanUrl = '';
+    if (addMode === 'url') {
+      cleanUrl = sanitizeExternalUrl(formUrl);
+      if (!cleanUrl) {
+        setFormError('Please enter a valid http:// or https:// URL.');
+        return;
+      }
+    } else if (!formNotesText.trim() && !uploadedFileDataUrl) {
+      setFormError('Please upload a study file or paste your class notes.');
+      return;
+    }
 
     const newItem = {
       id: `user-res-${Date.now()}`,
-      title: formTitle.trim(),
+      title: safeTitle,
       url: cleanUrl,
       type: formFormat,
       platform: addMode === 'url' ? 'Student Link' : uploadedFileName ? `Uploaded: ${uploadedFileName}` : 'My Class Notes',
-      duration: formDuration.trim() || '15 min',
+      duration: sanitizeUserText(formDuration, 24) || '15 min',
       level: formLevel,
       subject: formSubject,
       topicId: activeTopic.id,
       topicTitle: activeTopic.title,
       whyItFits:
-        formWhy.trim() ||
+        sanitizeUserText(formWhy, 220) ||
         (addMode === 'url'
           ? 'Custom link added by you to support this study module.'
           : 'Personal class notes / study file uploaded for quick review.'),
-      notesContent: addMode === 'notes' ? formNotesText.trim() : '',
-      fileDataUrl: addMode === 'notes' ? uploadedFileDataUrl : '',
+      notesContent: addMode === 'notes' ? sanitizeUserText(formNotesText, 12000) : '',
+      fileDataUrl: addMode === 'notes' && isSafeMediaDataUrl(uploadedFileDataUrl) ? uploadedFileDataUrl : '',
       fileName: uploadedFileName,
       isStudentUpload: true,
     };
@@ -623,15 +669,15 @@ export default function ResourceMatcher({
                 </div>
 
                 <div className="resource-actions">
-                  {res.url ? (
+                  {sanitizeExternalUrl(res.url) ? (
                     <a
-                      href={res.url}
+                      href={sanitizeExternalUrl(res.url)}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="btn-primary btn-sm flex-1"
                     >
                       <span>Open Resource</span>
-                      <ExternalLink size={14} />
+                      <ExternalLink size={14} aria-hidden="true" />
                     </a>
                   ) : (
                     <button
@@ -639,7 +685,7 @@ export default function ResourceMatcher({
                       className="btn-primary btn-sm flex-1"
                       onClick={() => setPreviewResource(res)}
                     >
-                      <Eye size={14} />
+                      <Eye size={14} aria-hidden="true" />
                       <span>Open My Notes / File</span>
                     </button>
                   )}
@@ -840,9 +886,16 @@ export default function ResourceMatcher({
                 />
               </div>
 
+              {formError && (
+                <div className="status-msg err" role="alert">
+                  <AlertCircle size={15} aria-hidden="true" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button type="submit" className="btn-primary">
-                  <Plus size={15} /> Add to My Resources
+                  <Plus size={15} aria-hidden="true" /> Add to My Resources
                 </button>
                 <button
                   type="button"
